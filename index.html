@@ -96,13 +96,11 @@
 <!-- ==================== 页面：个人资料 ==================== -->
 <main class="main-content page" id="page-profile">
   <div class="page-header">
-    <div><h1 class="page-title">个人资料</h1><p class="page-subtitle">这些信息将用于生成的简历中</p></div>
+    <div><h1 class="page-title">个人资料</h1><p class="page-subtitle">设置基本信息和 AI 模型</p></div>
   </div>
-  <div class="card" style="max-width:640px;">
-    <div class="form-group">
-      <label class="form-label">姓名 <span class="required">*</span></label>
-      <input type="text" class="form-input" id="pf-name" placeholder="你的姓名">
-    </div>
+  <div class="card" style="max-width:640px;margin-bottom:24px;">
+    <div class="card-header"><h3 class="card-title">基本信息</h3></div>
+    <div class="form-group"><label class="form-label">姓名</label><input type="text" class="form-input" id="pf-name" placeholder="你的姓名"></div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">邮箱</label><input type="email" class="form-input" id="pf-email" placeholder="example@email.com"></div>
       <div class="form-group"><label class="form-label">电话</label><input type="tel" class="form-input" id="pf-phone" placeholder="手机号码"></div>
@@ -110,6 +108,40 @@
     <div class="form-group"><label class="form-label">教育背景</label><input type="text" class="form-input" id="pf-education" placeholder="例如：本科 · 计算机科学与技术"></div>
     <div class="form-group"><label class="form-label">个人简介</label><textarea class="form-textarea" id="pf-summary" rows="3" placeholder="2-3 句话概括你的职业背景和核心优势..."></textarea></div>
     <button class="btn btn-primary" id="pf-save-btn" onclick="saveProfilePage()">💾 保存资料</button>
+  </div>
+
+  <!-- AI 设置 -->
+  <div class="card" style="max-width:640px;" id="ai-config-card">
+    <div class="card-header">
+      <h3 class="card-title">🤖 AI 模型设置</h3>
+      <span class="badge" id="ai-status-badge">未配置</span>
+    </div>
+    <div class="form-group">
+      <label class="form-label">AI 模型</label>
+      <select class="form-select" id="ai-provider" onchange="onAIProviderChange()">
+        <option value="doubao">豆包 (火山引擎)</option>
+        <option value="deepseek">DeepSeek</option>
+        <option value="openai">OpenAI</option>
+        <option value="custom">自定义 (兼容 OpenAI)</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">API Key</label>
+      <input type="password" class="form-input" id="ai-apikey" placeholder="输入你的 API Key">
+      <div class="form-hint" id="ai-apikey-hint"></div>
+    </div>
+    <div class="form-group" id="ai-baseurl-group">
+      <label class="form-label">API 地址</label>
+      <input type="text" class="form-input" id="ai-baseurl" placeholder="https://api.example.com/v1">
+    </div>
+    <div class="form-group">
+      <label class="form-label">模型名称</label>
+      <select class="form-select" id="ai-model-select"></select>
+      <input type="text" class="form-input" id="ai-model-custom" placeholder="自定义模型名" style="display:none;margin-top:8px;">
+    </div>
+    <div id="ai-help-box" style="font-size:0.82rem;color:var(--color-gray-500);background:var(--color-gray-50);padding:12px;border-radius:var(--radius);margin-bottom:16px;"></div>
+    <button class="btn btn-primary" onclick="saveAIConfig()">💾 保存 AI 设置</button>
+    <button class="btn btn-outline" onclick="testAIConnection()" style="margin-left:8px;">🔍 测试连接</button>
   </div>
 </main>
 
@@ -136,13 +168,17 @@
       <div class="form-hint">提示：粘贴完整的 JD 可以获得更准确的匹配结果</div>
     </div>
     <button class="btn btn-primary btn-lg" id="analyze-btn" onclick="analyzeJD()">🔍 开始分析</button>
+    <button class="btn btn-outline" id="ai-analyze-btn" onclick="aiAnalyzeJDClick()" style="margin-left:8px;" disabled>🤖 AI 分析岗位</button>
   </div>
+  <div id="ai-jd-result" style="display:none;margin-bottom:24px;"></div>
   <div id="match-results-section" style="display:none;">
     <div class="keyword-bar" id="keyword-bar"></div>
     <div id="match-results-list"></div>
-    <div style="display:flex;gap:12px;margin-top:24px;justify-content:center;" id="match-actions">
+    <div style="display:flex;gap:12px;margin-top:24px;justify-content:center;flex-wrap:wrap;" id="match-actions">
       <button class="btn btn-primary btn-lg" onclick="goToResume()">📄 生成简历</button>
       <button class="btn btn-success btn-lg" onclick="goToInterview()">🎤 准备面试</button>
+      <button class="btn btn-outline btn-lg" onclick="aiRewriteAllClick()" id="ai-rewrite-btn" style="display:none;">✨ AI 改写经历</button>
+      <button class="btn btn-outline btn-lg" onclick="aiGenResumeClick()" id="ai-resume-btn" style="display:none;">🤖 AI 生成简历</button>
     </div>
   </div>
 </main>
@@ -169,6 +205,7 @@
 <script src="js/store.js"></script>
 <script src="js/matcher.js"></script>
 <script src="js/interview.js"></script>
+<script src="js/ai.js"></script>
 <script src="js/utils.js"></script>
 <script src="js/app.js"></script>
 </body>

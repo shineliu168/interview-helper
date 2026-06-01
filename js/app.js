@@ -37,7 +37,11 @@ function navigate(page, params) {
     case 'home': initHomePage(); break;
     case 'profile': initProfilePage(); break;
     case 'experiences': initExperiencesPage(); break;
-    case 'match': break; // 不重置匹配页
+    case 'match':
+      // 如果配置了 AI，启用 AI 按钮
+      const aiBtn = document.getElementById('ai-analyze-btn');
+      if (aiBtn) aiBtn.disabled = !AIService.isAIConfigured();
+      break; // 不重置匹配页
     case 'resume': initResumePage(params); break;
     case 'interview': initInterviewPage(params); break;
   }
@@ -87,6 +91,7 @@ function initProfilePage() {
   document.getElementById('pf-phone').value = p.phone || '';
   document.getElementById('pf-education').value = p.education || '';
   document.getElementById('pf-summary').value = p.summary || '';
+  loadAIConfigUI();
 }
 
 function saveProfilePage() {
@@ -271,6 +276,10 @@ async function analyzeJD() {
     // 显示结果
     document.getElementById('match-results-section').style.display = 'block';
     document.getElementById('match-actions').style.display = 'flex';
+    // 如果配置了 AI，显示 AI 按钮
+    const aiConfigured = AIService.isAIConfigured();
+    document.getElementById('ai-rewrite-btn').style.display = aiConfigured ? '' : 'none';
+    document.getElementById('ai-resume-btn').style.display = aiConfigured ? '' : 'none';
     renderKeywords(keywords, jdSkills);
     renderMatchResults(results, experiences);
     document.getElementById('match-results-section').scrollIntoView({ behavior: 'smooth' });
@@ -546,6 +555,224 @@ function nextPractice() {
   }
   renderInterviewPage();
   setTimeout(() => { const ta = document.getElementById('pa-answer'); if(ta) ta.focus(); }, 100);
+}
+
+// ==================== AI 功能 ====================
+
+function loadAIConfigUI() {
+  const config = AIService.getAIConfig();
+  document.getElementById('ai-provider').value = config.provider || 'doubao';
+  document.getElementById('ai-apikey').value = config.apiKey || '';
+  document.getElementById('ai-baseurl').value = config.baseURL || AI_PROVIDERS[config.provider || 'doubao'].baseURL;
+  if (config.model) {
+    document.getElementById('ai-model-custom').value = config.model;
+  }
+  onAIProviderChange();
+  updateAIStatusBadge();
+}
+
+function onAIProviderChange() {
+  const p = document.getElementById('ai-provider').value;
+  const info = AI_PROVIDERS[p] || AI_PROVIDERS.doubao;
+  const modelSelect = document.getElementById('ai-model-select');
+  const modelCustom = document.getElementById('ai-model-custom');
+  const baseUrlGroup = document.getElementById('ai-baseurl-group');
+
+  // 更新 API 地址
+  document.getElementById('ai-baseurl').value = info.baseURL;
+
+  // 更新提示
+  document.getElementById('ai-apikey-hint').textContent = info.apiKeyHelp;
+
+  // 更新帮助框
+  const helpBox = document.getElementById('ai-help-box');
+  if (p === 'doubao') {
+    helpBox.innerHTML = `💡 <strong>豆包接入步骤：</strong><br>
+      1. 打开 <a href="https://console.volcengine.com/ark" target="_blank">火山方舟控制台</a><br>
+      2. 创建「推理接入点(Endpoint)」→ 复制 Endpoint ID 填到下方模型名<br>
+      3. 在「API Key 管理」创建 Key 填到上方<br>
+      费用：豆包 lite 模型非常便宜，几块钱能用很久`;
+  } else if (p === 'deepseek') {
+    helpBox.innerHTML = `💡 <strong>DeepSeek 接入步骤：</strong><br>
+      1. 打开 <a href="https://platform.deepseek.com" target="_blank">DeepSeek 开放平台</a><br>
+      2. 注册后创建 API Key<br>
+      费用：极低，百万 token 仅需 1-2 元`;
+  } else if (p === 'openai') {
+    helpBox.innerHTML = `💡 <strong>OpenAI 接入步骤：</strong><br>
+      1. 打开 <a href="https://platform.openai.com" target="_blank">OpenAI Platform</a><br>
+      2. 在 API Keys 页面创建 Key<br>
+      费用：按量计费，需要海外支付方式`;
+  } else {
+    helpBox.innerHTML = `💡 输入任意兼容 OpenAI 格式的 API 地址和 Key 即可使用。`;
+  }
+
+  // 设置模型选择器
+  if (p === 'custom') {
+    modelSelect.style.display = 'none';
+    modelCustom.style.display = 'block';
+    baseUrlGroup.style.display = 'block';
+  } else {
+    modelSelect.style.display = 'block';
+    modelCustom.style.display = 'none';
+    baseUrlGroup.style.display = p === 'custom' ? 'block' : 'none';
+    modelSelect.innerHTML = info.models.map(m => `<option value="${m}">${m}</option>`).join('');
+  }
+}
+
+function saveAIConfig() {
+  const provider = document.getElementById('ai-provider').value;
+  const apiKey = document.getElementById('ai-apikey').value.trim();
+  const baseURL = document.getElementById('ai-baseurl').value.trim();
+  let model;
+  if (provider === 'custom') {
+    model = document.getElementById('ai-model-custom').value.trim();
+  } else {
+    model = document.getElementById('ai-model-select').value;
+  }
+
+  if (!apiKey) { showToast('请输入 API Key', 'warning'); return; }
+  if (!model) { showToast('请输入模型名称', 'warning'); return; }
+
+  AIService.saveAIConfig({ provider, apiKey, baseURL, model });
+  updateAIStatusBadge();
+  showToast('AI 设置已保存', 'success');
+}
+
+function updateAIStatusBadge() {
+  const badge = document.getElementById('ai-status-badge');
+  if (AIService.isAIConfigured()) {
+    const config = AIService.getAIConfig();
+    const pname = (AI_PROVIDERS[config.provider] || AI_PROVIDERS.doubao).name;
+    badge.textContent = `✅ ${pname}`;
+    badge.className = 'badge badge-green';
+  } else {
+    badge.textContent = '未配置';
+    badge.className = 'badge badge-gray';
+  }
+}
+
+async function testAIConnection() {
+  if (!AIService.isAIConfigured()) {
+    showToast('请先保存 AI 设置', 'warning');
+    return;
+  }
+  const btn = document.activeElement;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner spinner-sm"></span> 测试中...';
+  try {
+    const resp = await callAI([{ role: 'user', content: '你好，请回复"连接成功"' }], { maxTokens: 20 });
+    showToast(resp.includes('成功') ? '连接成功！AI 模型可用' : '连接成功（返回: ' + resp.slice(0, 50) + '）', 'success');
+  } catch (err) {
+    showToast('连接失败: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔍 测试连接';
+  }
+}
+
+// ==================== AI 增强匹配功能 ====================
+
+async function aiAnalyzeJDClick() {
+  if (!AIService.isAIConfigured()) {
+    showToast('请先在「个人资料」页面配置 AI 模型', 'warning');
+    return;
+  }
+  const jdText = document.getElementById('jd-text').value.trim();
+  if (jdText.length < 20) { showToast('请先粘贴完整的 JD', 'warning'); return; }
+
+  const btn = document.getElementById('ai-analyze-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> AI 分析中...';
+
+  try {
+    const result = await AIService.aiAnalyzeJD(jdText);
+    const resultDiv = document.getElementById('ai-jd-result');
+    resultDiv.style.display = 'block';
+    resultDiv.innerHTML = `
+      <div class="card" style="border:2px solid var(--color-primary);background:var(--color-primary-light);">
+        <div class="card-header">
+          <h3 class="card-title">🤖 AI 岗位分析</h3>
+          <button class="btn btn-ghost btn-sm" onclick="this.closest('#ai-jd-result').style.display='none'">✕</button>
+        </div>
+        <div style="white-space:pre-wrap;line-height:1.8;font-size:0.9rem;">${escapeHtml(result).replace(/\n/g,'<br>')}</div>
+      </div>`;
+    resultDiv.scrollIntoView({ behavior: 'smooth' });
+    showToast('AI 分析完成！', 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '🤖 AI 分析岗位';
+  }
+}
+
+async function aiRewriteAllClick() {
+  if (!AIService.isAIConfigured()) {
+    showToast('请先在「个人资料」页面配置 AI 模型', 'warning');
+    return;
+  }
+  if (!currentMatchId) { showToast('请先完成匹配分析', 'warning'); return; }
+
+  const match = DataStore.getMatch(currentMatchId);
+  const experiences = DataStore.getSelectedExperiences(currentMatchId);
+  if (!experiences.length) { showToast('没有选中的经历', 'warning'); return; }
+
+  const btn = document.getElementById('ai-rewrite-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> AI 改写中...';
+
+  try {
+    let allResults = '';
+    for (let i = 0; i < experiences.length; i++) {
+      btn.innerHTML = `<span class="spinner"></span> AI 改写中 (${i + 1}/${experiences.length})...`;
+      const result = await AIService.aiRewriteExperience(
+        experiences[i], match.jdText || '', match.jobTitle || ''
+      );
+      allResults += `\n### ${experiences[i].company_name} - ${experiences[i].position}\n${result}\n---\n`;
+    }
+
+    showModal('✨ AI 改写结果', `
+      <div style="white-space:pre-wrap;line-height:1.8;font-size:0.9rem;max-height:60vh;overflow-y:auto;">${escapeHtml(allResults).replace(/\n/g,'<br>')}</div>
+    `);
+    showToast('改写完成！', 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '✨ AI 改写经历';
+  }
+}
+
+async function aiGenResumeClick() {
+  if (!AIService.isAIConfigured()) {
+    showToast('请先在「个人资料」页面配置 AI 模型', 'warning');
+    return;
+  }
+  if (!currentMatchId) { showToast('请先完成匹配分析', 'warning'); return; }
+
+  const match = DataStore.getMatch(currentMatchId);
+  const profile = DataStore.getProfile();
+  const experiences = DataStore.getSelectedExperiences(currentMatchId);
+  if (!experiences.length) { showToast('没有选中的经历', 'warning'); return; }
+
+  const btn = document.getElementById('ai-resume-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> AI 生成简历中...';
+
+  try {
+    const result = await AIService.aiGenerateResume(
+      profile, experiences, match.jdText || '', match.jobTitle || ''
+    );
+    showModal('🤖 AI 生成的简历', `
+      <div style="white-space:pre-wrap;line-height:1.8;font-size:0.9rem;max-height:65vh;overflow-y:auto;">${escapeHtml(result).replace(/\n/g,'<br>')}</div>
+    `);
+    showToast('AI 简历生成完成！', 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '🤖 AI 生成简历';
+  }
 }
 
 // ==================== 页面初始化 ====================
